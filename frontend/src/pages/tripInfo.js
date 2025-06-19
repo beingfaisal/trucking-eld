@@ -1,6 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { useLoadScript, Autocomplete } from '@react-google-maps/api';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useLoadScript } from '@react-google-maps/api';
+import PlaceAutoCompleteField from '../components/PlaceAutoCompleteField';
+import usePlaceAutoComplete from '../hooks/usePlaceAutoComplete';
 import Banner from '../components/Banner';
+import api from '../services/api';
+import API_ROUTES from '../config/apiRoutes';
 
 const libraries = ['places'];
 
@@ -9,6 +14,8 @@ export default function TripInfoPage() {
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY,
     libraries,
   });
+
+  const navigate = useNavigate();
 
   // Form state
   const [date, setDate] = useState('');
@@ -20,16 +27,13 @@ export default function TripInfoPage() {
   const [shipperName, setShipperName] = useState('');
   const [commodityName, setCommodityName] = useState('');
   const [loadNumbers, setLoadNumbers] = useState(['']);
+  
+  const currentHook  = usePlaceAutoComplete();
+  const pickupHook   = usePlaceAutoComplete();
+  const dropoffHook  = usePlaceAutoComplete();
+  
+  const allValidAddress = currentHook.isValid && pickupHook.isValid && dropoffHook.isValid;
 
-  // Address state
-  const [current, setCurrent] = useState('');
-  const [pickup, setPickup] = useState('');
-  const [dropoff, setDropoff] = useState('');
-
-  // Autocomplete refs
-  const currentRef = useRef(null);
-  const pickupRef = useRef(null);
-  const dropoffRef = useRef(null);
 
   if (loadError) return <p className="p-4 text-center">Error loading Maps</p>;
   if (!isLoaded)  return <p className="p-4 text-center">Loading map…</p>;
@@ -42,17 +46,11 @@ export default function TripInfoPage() {
     setter(tmp);
   };
 
-  // Handle place select
-  const handlePlaceChanged = (ref, setter) => {
-    const place = ref.current.getPlace();
-    if (place && place.formatted_address) {
-      setter(place.formatted_address);
-    }
-  };
 
   // Submit handler
-  const handleSubmit = (e) => {
+  const handleSubmit = async(e) => {
     e.preventDefault();
+    if (!allValidAddress) return;
     const payload = {
       date,
       driverNumber,
@@ -63,12 +61,25 @@ export default function TripInfoPage() {
       shipperName,
       commodityName,
       loadNumbers: loadNumbers.filter(Boolean),
-      currentLocation: current,
-      pickupLocation: pickup,
-      dropoffLocation: dropoff,
+      currentLocation: {address: currentHook.address, lat: currentHook.lat, lng: currentHook.lng },
+      pickupLocation: {address: pickupHook.address, lat: pickupHook.lat, lng: pickupHook.lng },
+      dropoffLocation: {address: dropoffHook.address, lat: dropoffHook.lat, lng: dropoffHook.lng },
     };
     console.log('Payload', payload);
-    // TODO: send to backend via api.post
+
+    
+    try {
+      const res = await api.post(API_ROUTES.navigation.route, payload);
+      navigate('/results', {
+        state: {
+          routeData: res.data,
+          inputData: payload,
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Could not calculate route. Please try again.');
+    }
   };
 
   return (
@@ -91,54 +102,22 @@ export default function TripInfoPage() {
                   required
                 />
               </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Current Location</label>
-                    <Autocomplete
-                      onLoad={auto => (currentRef.current = auto)}
-                      onPlaceChanged={() => handlePlaceChanged(currentRef, setCurrent)}
-                    >
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-2"
-                        placeholder="Start typing an address…"
-                        value={current}
-                        onChange={e => setCurrent(e.target.value)}
-                        required
-                      />
-                    </Autocomplete>
-                </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Pickup Location</label>
-                    <Autocomplete
-                      onLoad={auto => (pickupRef.current = auto)}
-                      onPlaceChanged={() => handlePlaceChanged(pickupRef, setPickup)}
-                    >
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-2"
-                        placeholder="Start typing an address…"
-                        value={pickup}
-                        onChange={e => setPickup(e.target.value)}
-                        required
-                      />
-                    </Autocomplete>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Drop-off Location</label>
-                    <Autocomplete
-                      onLoad={auto => (dropoffRef.current = auto)}
-                      onPlaceChanged={() => handlePlaceChanged(dropoffRef, setDropoff)}
-                    >
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-2"
-                        placeholder="Start typing an address…"
-                        value={dropoff}
-                        onChange={e => setDropoff(e.target.value)}
-                        required
-                      />
-                    </Autocomplete>
-                  </div>
+                  <PlaceAutoCompleteField 
+                    label="Current Location"
+                    hook={currentHook}
+                    placeholder="Start typing an address…"
+                  />
+                  <PlaceAutoCompleteField
+                    label="Pickup Location"
+                    hook={pickupHook}
+                    placeholder="Start typing an address…"
+                  />
+                  <PlaceAutoCompleteField
+                    label="Drop-off Location"
+                    hook={dropoffHook}
+                    placeholder="Start typing an address…"
+                  />
+
               <div>
                 <label className="block text-sm font-medium mb-1">Driver Number (7 digits)</label>
                 <input
