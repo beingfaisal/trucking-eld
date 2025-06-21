@@ -84,7 +84,7 @@ export default function RouteInfo() {
 
   return (
     <>
-      <Banner title={'Trucking ELD'}/>
+      <Banner/>
       <main className="flex h-[calc(100vh-64px)] overflow-hidden">
         <aside className="w-64 shrink-0 overflow-auto bg-gray-50 p-4 space-y-6">
           <div className="bg-white p-4 rounded shadow">

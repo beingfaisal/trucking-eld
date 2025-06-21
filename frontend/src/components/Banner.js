@@ -1,29 +1,38 @@
-import React from 'react';
 import PropTypes from 'prop-types';
+import routeIcon from '../static/route.png';
 
-function Banner({ title }) {
+function Banner({
+  title   = 'Trucking ELD',
+  tagline = 'Effortless Route Planning',
+  logoSrc = routeIcon,
+}) {
   return (
-    <header className="bg-gradient-to-r from-blue-700 to-blue-500 shadow-md">
-      <div className="max-w-6xl mx-auto flex items-center justify-center px-6 py-4 space-x-4">
+    <header className="bg-transparent border-b border-gray-300 backdrop-filter backdrop-blur-sm">
+      <div className="max-w-6xl mx-auto flex items-center justify-center px-6 py-4">
         <img
-          src="delivery.png"
-          alt="Trucking ELD Logo"
-          className="h-12 w-auto"
+          src={logoSrc}
+          alt="Route Logo"
+          className="h-10 w-auto"
         />
-        <h1 className="text-white text-3xl sm:text-4xl font-semibold tracking-wide">
-          {title}
-        </h1>
+        <div className="flex items-baseline ml-4 space-x-4">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+            {title}
+          </h1>
+          {tagline && (
+            <p className="text-gray-700 italic text-sm sm:text-base">
+              {tagline}
+            </p>
+          )}
+        </div>
       </div>
     </header>
   );
 }
 
 Banner.propTypes = {
-  title: PropTypes.string,
-};
-
-Banner.defaultProps = {
-  title: 'Trucking ELD',
+  title:   PropTypes.string,
+  tagline: PropTypes.string,
+  logoSrc: PropTypes.string,
 };
 
 export default Banner;
