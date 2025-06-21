@@ -14,8 +14,6 @@ export default function usePlaceAutoComplete(initialAddress = '') {
       setAddress(place.formatted_address);
       setLat(place.geometry.location.lat());
       setLng(place.geometry.location.lng());
-      console.log('Place changed:', place.formatted_address);
-      console.log('Coordinates:', place.geometry.location.lat(), place.geometry.location.lng());
       setIsValid(true);
       setTouched(true);
     }

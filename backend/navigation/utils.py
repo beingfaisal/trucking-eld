@@ -1,8 +1,8 @@
 import requests
 import itertools
-import math
+from  datetime import datetime, time, timedelta
 from bisect import bisect_left
-from .constants import OSRM_URL, MILE_IN_METERS, SECONDS_IN_HOUR, FUEL_STOP_DISTANCE, DAILY_DRIVING_LIMIT_HRS, REQUIRED_BREAK_HRS_THRESHOLD
+from .constants import OSRM_URL, MILE_IN_METERS, SECONDS_IN_HOUR, FUEL_STOP_DISTANCE, DAILY_DRIVING_LIMIT_HRS, REQUIRED_BREAK_HRS_THRESHOLD, TRIP_STOP_DURATIONS_IN_HRS
 
 def calculate_route(coordinates_list):
     compiled_coords = ';'.join([f"{coord['lng']},{coord['lat']}" for coord in coordinates_list])
@@ -29,27 +29,27 @@ def calculate_linear_interpolation(geometry, cumulative_prop, cutoff_index, thre
     ratio = (threshold - prev_segment) / current_segment if current_segment > 0 else 0
     lng1, lat1 = geometry[cutoff_index - 1]
     lng2, lat2 = geometry[cutoff_index]
-    return [
+    return (
         lng1 + (lng2 - lng1) * ratio,
         lat1 + (lat2 - lat1) * ratio
-    ]
+    )
 
 
-def calculate_distance_breaks(geometry, events, cumulative_dist, total_dist):
+def calculate_distance_breaks(geometry, cumulative_dist, total_dist):
+    fuel_stops = {}
     distance_covered = FUEL_STOP_DISTANCE
     while distance_covered < total_dist:
         cutoff_ind = bisect_left(cumulative_dist, distance_covered)
         event_loc = calculate_linear_interpolation(geometry, cumulative_dist, cutoff_ind, distance_covered)
-        events.append({
-            'type': 'fuel_stop',
-            'mile_marker': round(distance_covered / MILE_IN_METERS, 1),
-            'location': event_loc,
-        })
+        fuel_stops[event_loc] = {
+            'type': 'fuel_stop'
+        }
         distance_covered += FUEL_STOP_DISTANCE
 
-    return events 
+    return fuel_stops 
 
-def calculate_time_breaks(geometry, events, cumulative_time, total_time):
+def calculate_time_breaks(geometry, cumulative_time, total_time):
+    break_stops = {}
 
     total_driving_time = REQUIRED_BREAK_HRS_THRESHOLD * SECONDS_IN_HOUR
     current_driving_hrs = REQUIRED_BREAK_HRS_THRESHOLD
@@ -57,11 +57,9 @@ def calculate_time_breaks(geometry, events, cumulative_time, total_time):
     while total_driving_time < total_time:
         cutoff_ind = bisect_left(cumulative_time, total_driving_time)
         event_loc = calculate_linear_interpolation(geometry, cumulative_time, cutoff_ind, total_driving_time)
-        events.append({
-            'type': 'day_end' if current_driving_hrs >= DAILY_DRIVING_LIMIT_HRS else 'break_30m',
-            'time_marker_h': total_driving_time / SECONDS_IN_HOUR,
-            'location': event_loc
-        })
+        break_stops[event_loc] = {
+            'type': 'duty_break' if current_driving_hrs >= DAILY_DRIVING_LIMIT_HRS else 'rest_30m'
+        }
 
         if current_driving_hrs >= DAILY_DRIVING_LIMIT_HRS: # Means a day ended so we add the next 8 hrs limit into the total driving time
             total_driving_time += REQUIRED_BREAK_HRS_THRESHOLD * SECONDS_IN_HOUR
@@ -71,15 +69,50 @@ def calculate_time_breaks(geometry, events, cumulative_time, total_time):
             total_driving_time += remaining_daily_hrs * SECONDS_IN_HOUR
             current_driving_hrs = DAILY_DRIVING_LIMIT_HRS
 
+    return break_stops
+
+
+def calculate_progress_at_coordinates(geometry, cumulative_dist, cumulative_time, corrdinates):
+    events = []
+
+    for coord in corrdinates.keys():
+        lng, lat = coord[0], coord[1]
+
+        best_idx = min(
+            range(len(geometry)),
+            key=lambda i: (geometry[i][0] - lng)**2 + (geometry[i][1] - lat)**2
+        )
+
+        events.append({
+            'type': corrdinates[coord]['type'],
+            'location': [lng, lat],
+            'mile_marker': round(cumulative_dist[best_idx] / MILE_IN_METERS, 2),
+            'time_marker_h': round(cumulative_time[best_idx] / SECONDS_IN_HOUR, 2),
+        })
+
     return events
 
-def compute_route_events(geometry, distances, durations):
+
+def calculate_employee_time(events, date):
+    events.sort(key=lambda x: x['mile_marker'])
+    trip_time = datetime.combine(date, time(hour=8, minute=0))
+    for event in events:
+        break_time = TRIP_STOP_DURATIONS_IN_HRS[event['type']]
+        arrival_time = trip_time + timedelta(hours=event['time_marker_h'])
+        departure_time = arrival_time + timedelta(hours=break_time)
+        event['arrival_time'] = arrival_time.strftime('%Y-%m-%d %H:%M:%S')
+        event['departure_time'] = departure_time.strftime('%Y-%m-%d %H:%M:%S')
+    return events
+
+
+def compute_route_events(geometry, distances, durations, trip_stops):
     cumulative_dist = [0.0] + list(itertools.accumulate(distances))
     cumulative_time = [0.0] + list(itertools.accumulate(durations))
     total_dist = cumulative_dist[-1]
     total_time = cumulative_time[-1]
 
-    events = []
-    calculate_distance_breaks(geometry, events, cumulative_dist, total_dist)
-    calculate_time_breaks(geometry, events, cumulative_time, total_time)
+    fuel_stops = calculate_distance_breaks(geometry, cumulative_dist, total_dist)
+    break_stops = calculate_time_breaks(geometry, cumulative_time, total_time)
+    total_trip_stops = {**trip_stops, **fuel_stops, **break_stops}
+    events = calculate_progress_at_coordinates(geometry, cumulative_dist, cumulative_time, total_trip_stops)
     return events
