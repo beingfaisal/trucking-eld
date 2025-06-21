@@ -1,15 +1,15 @@
-// src/components/PlaceAutocompleteField.js
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Autocomplete } from '@react-google-maps/api';
 
-export default function PlaceAutocompleteField({
-  label, hook, placeholder,
-}) {
+function PlaceAutoCompleteField({ label, hook, placeholder }) {
   return (
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>
       <Autocomplete
-        onLoad={auto => (hook.ref.current = auto)}
+        onLoad={(auto) => {
+          hook.ref.current = auto;
+        }}
         onPlaceChanged={hook.handlePlaceChanged}
       >
         <input
@@ -33,3 +33,23 @@ export default function PlaceAutocompleteField({
     </div>
   );
 }
+
+PlaceAutoCompleteField.propTypes = {
+  label: PropTypes.string.isRequired,
+  hook: PropTypes.shape({
+    ref: PropTypes.shape({ current: PropTypes.object }),
+    handlePlaceChanged: PropTypes.func.isRequired,
+    touched: PropTypes.bool,
+    isValid: PropTypes.bool,
+    address: PropTypes.string,
+    handleChange: PropTypes.func.isRequired,
+    handleBlur: PropTypes.func.isRequired,
+  }).isRequired,
+  placeholder: PropTypes.string,
+};
+
+PlaceAutoCompleteField.defaultProps = {
+  placeholder: '',
+};
+
+export default PlaceAutoCompleteField;
