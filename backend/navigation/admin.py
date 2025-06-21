@@ -1,3 +1,2 @@
-from django.contrib import admin
-
+"""Admin configuration for the navigation app."""
 # Register your models here.
